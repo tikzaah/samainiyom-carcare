@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>สมัยนิยม คาร์แคร์</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="สมัยนิยม คาร์แคร์">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12151b" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://static.line-scdn.net">
+<style>
+  html, body { margin: 0; height: 100%; background: #f4f5f7; }
+  @media (prefers-color-scheme: dark) { html, body { background: #12151b; } }
+  iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+</style>
+</head>
+<body>
+<!-- แอปของร้าน (Google Apps Script) ฝังอยู่ในหน้านี้ เพื่อให้มีไอคอน/ชื่อแอปของร้าน และล็อกอินด้วย LINE (LIFF) -->
+<iframe allow="geolocation" src="https://script.google.com/macros/s/AKfycbybLH9Sd_EnXuKFEHDvlIHGF6VR_ZZ_unK_5Pw1WozVfHBfKDX3zMeDBR3-im-CCBZ1Pg/exec"
+        title="สมัยนิยม คาร์แคร์"></iframe>
+<script>
+  // แอปในกรอบส่ง yuni-ready มา แล้วหน้านี้ตอบกลับด้วย session ที่จำไว้ (เร็วสุด) หรือ ID token ของ LINE หรือ none
+  // ?pair=รหัส = เปิดจากปุ่มล็อกอินของแอปบนหน้าจอโฮม: ล็อกอินที่นี่แล้วส่ง session ให้แอปนั้น (แอปหน้าจอโฮมรับ redirect ของ LINE ไม่ได้)
+  // session ของแอปเก็บที่หน้านี้ (iPhone ล้างที่เก็บข้อมูลของกรอบ Google ทุกครั้งที่ปิดแอปบนหน้าจอโฮม)
+  const LIFF_ID = '2012337646-MBInwlTh';
+  // ทุกร้านอยู่โดเมน tikzaah.github.io เดียวกัน ที่เก็บข้อมูลใช้ร่วมกัน จึงตั้งชื่อตามร้าน
+  const CRED_KEY = 'samainiyom_cred', WHO_KEY = 'samainiyom_who';
+  const frame = document.querySelector('iframe');
+  const waiting = [];
+  let auth = null;
+  const store = {
+    get(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } },
+    set(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} },
+  };
+  const savedWho = () => { try { return JSON.parse(store.get(WHO_KEY) || 'null'); } catch (e) { return null; } };
+  const pairing = /pair/.test(location.search);
+  // ?as=customer = พนักงาน/เจ้าของเปิดดูแบบลูกค้าเพื่อทดสอบ (ผ่าน liff.line.me จะมาเป็น liff.state=%3Fas%3Dcustomer)
+  const asCustomer = /as(=|%3D)customer/i.test(location.search);
+  /** ข้อความมาจากแอปในกรอบของหน้านี้จริง (ไม่ใช่หน้าเว็บอื่น) */
+  function fromApp(src) {
+    for (let w = src, i = 0; w && i < 4; i++, w = w.parent) if (w === frame.contentWindow) return true;
+    return false;
+  }
+  function flush() {
+    if (!auth) return;
+    waiting.splice(0).forEach(w => w.src.postMessage(Object.assign({ type: 'yuni-auth', cred: store.get(CRED_KEY), who: savedWho(), asCustomer: asCustomer }, auth), w.origin));
+  }
+  window.addEventListener('message', e => {
+    const t = e.data && e.data.type;
+    if (!t || !fromApp(e.source)) return;
+    if (t === 'yuni-ready') { waiting.push({ src: e.source, origin: e.origin }); flush(); }
+    if (t === 'yuni-save') {
+      store.set(CRED_KEY, String(e.data.cred || ''));
+      store.set(WHO_KEY, e.data.cred && e.data.who ? JSON.stringify(e.data.who) : '');
+    }
+    // ปุ่ม "ใช้ตำแหน่งปัจจุบัน": เบราว์เซอร์ไม่ให้กรอบซ้อนของ Google ขอตำแหน่ง หน้านี้ขอแทนแล้วส่งพิกัดกลับ
+    if (t === 'yuni-locate') {
+      const reply = d => e.source.postMessage(Object.assign({ type: 'yuni-location' }, d), e.origin);
+      reply({ pending: true });
+      if (!navigator.geolocation) reply({ error: 0 });
+      else navigator.geolocation.getCurrentPosition(p => reply({ lat: p.coords.latitude, lng: p.coords.longitude }),
+        err => reply({ error: err.code }), { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    }
+    if (t === 'yuni-logout') { store.set(CRED_KEY, ''); store.set(WHO_KEY, ''); if (window.liff && liff.isLoggedIn()) liff.logout(); }
+  });
+  // เคยล็อกอินแล้ว: ตอบแอปได้เลย ไม่ต้องรอ LINE
+  if (store.get(CRED_KEY) && !pairing) auth = { none: true };
+  function startLiff() {
+    liff.init({ liffId: LIFF_ID }).then(() => {
+      if (auth) return;
+      const pair = new URLSearchParams(location.search).get('pair') || '';
+      const decoded = liff.isLoggedIn() ? liff.getDecodedIDToken() : null;
+      if (liff.isLoggedIn() && (!decoded || decoded.exp * 1000 < Date.now() + 60000)) liff.logout(); // token หมดอายุ ล็อกอินใหม่
+      if (liff.isLoggedIn()) auth = { idToken: liff.getIDToken(), pair: pair };
+      else if (liff.isInClient() || pair) { liff.login({ redirectUri: location.href }); return; }
+      else auth = { none: true };
+      flush();
+    }).catch(err => { if (!auth) { auth = { none: true, error: String(err) }; flush(); } });
+  }
+  function liffFailed() { if (!auth) { auth = { none: true, error: 'LIFF SDK โหลดไม่ได้' }; flush(); } }
+</script>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js" async onload="startLiff()" onerror="liffFailed()"></script>
+</body>
+</html>
