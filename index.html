@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>สมัยนิยม คาร์แคร์</title>
+<title>สมัยนิยมคาร์แคร์</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="สมัยนิยม คาร์แคร์">
@@ -43,6 +43,8 @@
   const pairing = /pair/.test(location.search);
   // ?as=customer = พนักงาน/เจ้าของเปิดดูแบบลูกค้าเพื่อทดสอบ (ผ่าน liff.line.me จะมาเป็น liff.state=%3Fas%3Dcustomer)
   const asCustomer = /as(=|%3D)customer/i.test(location.search);
+  // ?page=points = เปิดหน้า "สะสมของฉัน" ก่อน (ปุ่มในเมนู LINE · ผ่าน liff.line.me จะมาเป็น liff.state=%3Fpage%3Dpoints)
+  const startPage = (decodeURIComponent(location.search).match(/[?&]page=(\w+)/) || [])[1] || '';
   /** ข้อความมาจากแอปในกรอบของหน้านี้จริง (ไม่ใช่หน้าเว็บอื่น) */
   function fromApp(src) {
     for (let w = src, i = 0; w && i < 4; i++, w = w.parent) if (w === frame.contentWindow) return true;
@@ -50,7 +52,7 @@
   }
   function flush() {
     if (!auth) return;
-    waiting.splice(0).forEach(w => w.src.postMessage(Object.assign({ type: 'yuni-auth', cred: store.get(CRED_KEY), who: savedWho(), asCustomer: asCustomer }, auth), w.origin));
+    waiting.splice(0).forEach(w => w.src.postMessage(Object.assign({ type: 'yuni-auth', cred: store.get(CRED_KEY), who: savedWho(), asCustomer: asCustomer, page: startPage }, auth), w.origin));
   }
   window.addEventListener('message', e => {
     const t = e.data && e.data.type;
